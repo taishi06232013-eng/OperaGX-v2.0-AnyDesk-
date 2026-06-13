@@ -1,4 +1,4 @@
-name: Cloud PC + Token-Free RDP Tunnel (LHR) + Opera GX
+name: Cloud PC + Token-Free RDP Tunnel (Pinggy) + Opera GX
 
 on:
   workflow_dispatch:
@@ -99,28 +99,28 @@ jobs:
 
       - name: Launch Token-Free Tunnel & Display Connection Endpoint
         run: |
-          Write-Host "Initializing secure reverse port-forward via Localhost.run network layers..."
-          $logFile = "$env:TEMP\lhr.log"
+          Write-Host "Initializing secure reverse port-forward via Pinggy network layers..."
+          $logFile = "$env:TEMP\pinggy.log"
           
-          # Establish connection via localhost.run reverse endpoint proxy over standard SSH
-          Start-Process ssh -ArgumentList "-R 80:localhost:3389 nokey@localhost.run", "-o StrictHostKeyChecking=no", "-o ServerAliveInterval=60" -RedirectStandardOutput $logFile -NoNewWindow
+          # Establish connection via raw TCP tunnel on pinggy.io over standard outbound SSH
+          Start-Process ssh -ArgumentList "-R 0:localhost:3389 tcp@pinggy.io", "-o StrictHostKeyChecking=no", "-o ServerAliveInterval=60" -RedirectStandardOutput $logFile -NoNewWindow
           
           Write-Host "Waiting for tunnel generation..."
           Start-Sleep -Seconds 10
           
-          # Refined parser to accurately extract the address from the multiline output structure
+          # Parse the explicit TCP hostname pattern from pinggy logs
           $LogContent = Get-Content $logFile
           $CleanAddress = ""
           
           foreach ($Line in $LogContent) {
-              if ($Line -match "([a-zA-Z0-9\-]+\.lhr\.life)") {
+              if ($Line -match "tcp://([^ ]+)") {
                   $CleanAddress = $Matches[1].Trim()
                   break
               }
           }
           
           if ($CleanAddress -ne "") {
-              # ANSI Escape Sequences for vibrant terminal colors
+              # ANSI Escape Sequences for high-visibility terminal layout
               $Esc = [char]27
               $Cyan = "$Esc[36m"
               $Yellow = "$Esc[33m"
@@ -137,7 +137,7 @@ jobs:
               Write-Host "${Cyan}###########################################################################${Reset}"
               Write-Host ""
           } else {
-              Write-Warning "Tunnel address signature not found in standard buffer. Displaying raw dump below:"
+              Write-Warning "Tunnel address signature not found. Displaying log buffer:"
               Get-Content $logFile -ErrorAction SilentlyContinue
           }
 
