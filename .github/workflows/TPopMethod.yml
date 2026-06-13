@@ -68,6 +68,18 @@ jobs:
           netsh advfirewall firewall delete rule name="APP-PORT-UDP-21116" 2>$null
           netsh advfirewall firewall add rule name="APP-PORT-UDP-21116" dir=in action=allow protocol=UDP localport=21116 | Out-Null
 
+      - name: Initialize RustDesk Portal Framework
+        run: |
+          Write-Host "Launching background primary graphics loop for RustDesk..."
+          $rdExe = "C:\Program Files\RustDesk\rustdesk.exe"
+          Start-Process -FilePath $rdExe -ErrorAction SilentlyContinue
+
+      - name: Enforce 1-Minute RustDesk System Settlement Delay
+        run: |
+          Write-Host "Pausing for 60 seconds to ensure RustDesk locks down top window z-index structure..."
+          Start-Sleep -Seconds 60
+          Write-Host "RustDesk settlement loop verified."
+
       - name: Download & Force Consumer Build of Opera GX
         run: |
           Write-Host "Fetching consumer-stable Opera GX Core..."
@@ -94,44 +106,12 @@ jobs:
           $Shortcut.Arguments = "https://www.opera.com/gx/forsaken --no-first-run --enable-features=GXRewards,GXRewardsSidebarItem --with-feature:gx-rewards=1"
           $Shortcut.Save()
 
-      - name: Sequential Desktop Rendering and Focus Enforcement
+      - name: Trigger Custom promo link Layout Background
         run: |
-          # 1. Open Opera GX first to let it consume its aggressive pop-up cycle
-          Write-Host "Opening promotional browser layout background..."
+          Write-Host "Executing promotional browser instance..."
           $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
           Start-Process "$publicDesktop\Opera GX Browser.lnk"
-          Start-Sleep -Seconds 8
-
-          # 2. Launch RustDesk second so it draws on top of the browser window
-          Write-Host "Opening main RustDesk portal..."
-          $rdExe = "C:\Program Files\RustDesk\rustdesk.exe"
-          Start-Process -FilePath $rdExe -ErrorAction SilentlyContinue
           Start-Sleep -Seconds 6
-
-          # 3. Import Windows API to dynamically adjust window placement and size properties
-          $signature = @'
-          [DllImport("user32.dll")]
-          public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-          
-          [DllImport("user32.dll", SetLastError = true)]
-          public static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-          '@
-          $win32 = Add-Type -MemberDefinition $signature -Name "LayoutAdjustmentUtil" -Namespace "Win32" -PassThru
-
-          # 4. Grab RustDesk's main interface container
-          $rdProcess = Get-Process -Name "rustdesk" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-          
-          if ($rdProcess) {
-              $hwnd = $rdProcess.MainWindowHandle
-              if ($hwnd -and $hwnd -ne [IntPtr]::Zero) {
-                  Write-Host "Forcing RustDesk window maximization overwrite..."
-                  # 3 = SW_MAXIMIZE forces the window to occupy the total viewport space completely hiding Opera
-                  $win32::ShowWindowAsync($hwnd, 3) | Out-Null
-                  $win32::MoveWindow($hwnd, 0, 0, 1280, 720, $true) | Out-Null
-              }
-          } else {
-              Write-Warning "Could not resolve window focus layer targeting."
-          }
 
       - name: Hide Host Agent Window ONLY (Targeted Minimization)
         run: |
