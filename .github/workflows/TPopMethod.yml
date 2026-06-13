@@ -33,29 +33,35 @@ jobs:
           Write-Host "Pulling AweSun executable from your Release v1.0..."
           gh release download v1.0 --repo "tusharpop553-afk/OperaGX-RDP" --pattern "AweSun_Setup.exe" --dir "$env:TEMP"
 
-      - name: Extract Portable Core Files (Bypass Hanging Installer)
+      - name: Force Extract via 7-Zip (Zero Installer Execution)
         run: |
           $installer = "$env:TEMP\AweSun_Setup.exe"
           $extractDir = "$env:ProgramFiles\AweSun"
-          New-Item -ItemType Directory -Force -Path $extractDir | Out-Null
           
-          Write-Host "Extracting application payload headlessly..."
-          # Forcing extraction directly to destination to eliminate interactive prompt freezes
-          Start-Process -FilePath $installer -ArgumentList "/Extract", "/Dir=`"$extractDir`"", "/Silent" -Wait
-          Start-Sleep -Seconds 5
+          Write-Host "Forcing 7-Zip raw extraction to bypass setup freezes..."
+          # This rips the files straight out out of the exe container headlessly
+          & "C:\Program Files\7-Zip\7z.exe" x $installer "-o$extractDir" -y | Out-Null
+          
+          # Check if the exe file landed in the primary directory or an inner nested folder
+          if (-not (Test-Path "$extractDir\AweSun.exe")) {
+              Write-Host "Checking for nested folder extractions..."
+              $nestedExe = Get-ChildItem -Path $extractDir -Filter "AweSun.exe" -Recurse | Select-Object -First 1
+              if ($nestedExe) {
+                  Copy-Item -Path $nestedExe.FullName -Destination "$extractDir\AweSun.exe" -Force
+              }
+          }
+          Write-Host "✅ Extraction sequence complete!"
 
       - name: Force Start AweSun Service and Parse Credentials
         run: |
           $aweSunPath = "$env:ProgramFiles\AweSun\AweSun.exe"
-          if (-not (Test-Path $aweSunPath)) {
-              # Fallback path verification
-              $aweSunPath = "C:\Program Files (x86)\AweSun\AweSun.exe"
-          }
           
-          # Spin up the background routing layers
+          # Spin up the core portable desktop host process
           Start-Process $aweSunPath -ArgumentList "-service" -NoNewWindow
-          Start-Sleep -Seconds 15
+          Write-Host "Waking up background communication loops... waiting 20s"
+          Start-Sleep -Seconds 20
           
+          # Locating configuration data files
           $configPath = "$env:AppData\AweSun\config.ini"
           if (-not (Test-Path $configPath)) { $configPath = "C:\ProgramData\AweSun\config.ini" }
           
@@ -72,7 +78,7 @@ jobs:
               Write-Host "${Esc}[32m🔑 PASSCODE / PASSWORD: $AweSunPw${Esc}[0m"
               Write-Host "${Esc}[36m###########################################################################${Esc}[0m`n"
           } else {
-              Write-Warning "Configuration engine is active. Inspecting system assignments..."
+              Write-Warning "Config payload not populated yet. Dumping running tasks:"
               Get-Process | Where-Object {$_.Name -like "*AweSun*"}
           }
 
