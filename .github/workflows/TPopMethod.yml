@@ -1,4 +1,4 @@
-name: Cloud PC + Web Browser Link + Opera GX (Auto-Login Fix)
+name: Cloud PC + Web Browser Link + Opera GX (TigerVNC Stable)
 
 on:
   workflow_dispatch:
@@ -28,29 +28,20 @@ jobs:
       - name: Force Full HD Resolution
         run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
 
-      - name: Install and Configure TightVNC Server (Silent Registry Injection)
+      - name: Install and Configure TigerVNC Server
         run: |
-          Invoke-WebRequest -Uri "https://www.tightvnc.com/download/2.8.84/tightvnc-2.8.84-gpl-setup-64bit.msi" -OutFile "$env:TEMP\tightvnc.msi"
-          Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\tightvnc.msi`" /quiet /qn SERVER_REGISTER_AS_SERVICE=1" -Wait
+          # Install TigerVNC via Chocolatey (standard Windows runner package manager)
+          choco install tigervnc-server -y --no-progress
           
-          Start-Sleep -Seconds 5
+          # Create the local configurations directory
+          $configDir = "$env:USERPROFILE\.vnc"
+          if (-not (Test-Path $configDir)) { New-Item -ItemType Directory -Path $configDir -Force }
           
-          # Injecting settings directly into the Registry to avoid invisible confirmation popups
-          $vncPath = "HKLM:\SOFTWARE\TightVNC\Server"
-          if (Test-Path $vncPath) {
-              Set-ItemProperty -Path $vncPath -Name "AuthRequired" -Value 1 -Type DWord
-              Set-ItemProperty -Path $vncPath -Name "AuthType" -Value 1 -Type DWord
-              Set-ItemProperty -Path $vncPath -Name "AllowLoopback" -Value 1 -Type DWord
-              Set-ItemProperty -Path $vncPath -Name "AcceptLocalConnections" -Value 1 -Type DWord
-              
-              # This is the pre-calculated hex string representing your password "Pass1234"
-              [byte[]]$passHex = 0x21, 0x47, 0x66, 0x7A, 0x55, 0xAA, 0x6B, 0x39
-              Set-ItemProperty -Path $vncPath -Name "Password" -Value $passHex -Type Binary
-              Set-ItemProperty -Path $vncPath -Name "ControlPassword" -Value $passHex -Type Binary
-          }
+          # Generate the password file headlessly using TigerVNC's native password utility
+          echo "${{ env.VNC_PASS }}" | & "C:\Program Files\TigerVNC\vncpasswd.exe" -f > "$configDir\passwd"
           
-          # Force refresh the system service to pick up the changes instantly
-          Restart-Service -Name "TightVNC Server" -Force
+          # Start the TigerVNC server instance running locally on port 5900
+          Start-Process "C:\Program Files\TigerVNC\winvnc.exe" -ArgumentList "-run", "-localhost=0"
 
       - name: Download & Force Consumer Build of Opera GX
         run: |
@@ -59,7 +50,6 @@ jobs:
 
       - name: Deploy Web Interface & Dynamic Gateway Engines
         run: |
-          # Strip out all interactive terminal elements, progress bars, and warnings to prevent stalling
           python -m pip install websockify --quiet --no-input --disable-pip-version-check --no-color --progress-bar off
           npm install -g localtunnel --silent --no-fund --no-audit --non-interactive
           
@@ -88,13 +78,12 @@ jobs:
           $RawLink = (Get-Content $LogFile -Raw) | Select-String -Pattern 'https://[a-zA-Z0-9-]+\.loca\.lt' | Select-Object -ExpandProperty Matches | Select-Object -ExpandProperty Value -First 1
           
           if ($RawLink) {
-              # Tacks the login credential arguments to the URL so noVNC bypasses the user prompt
               $FinalUrl = $RawLink + "/vnc.html?autoconnect=true&password=" + "${{ env.VNC_PASS }}"
               Write-Host "===================================================="
               Write-Host "      WEB-BROWSER CLOUD PC IS READY TO CONNECT      "
               Write-Host "===================================================="
               Write-Host " CLICK LINK: $FinalUrl"
-              Write-Host " SECURITY  : Credentials embedded. Automatic bypass active."
+              Write-Host " PASSWORD  : ${{ env.VNC_PASS }}"
               Write-Host "===================================================="
           } else {
               Write-Error "CRITICAL: Dynamic gateway assignment timed out."
