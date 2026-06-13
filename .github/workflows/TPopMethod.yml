@@ -1,4 +1,4 @@
-name: Cloud PC via Release-Hosted AweSun (With BashUpload Link)
+name: Cloud PC via Release-Hosted AweSun (With Native Old-Code Link)
 
 on:
   workflow_dispatch:
@@ -54,40 +54,30 @@ jobs:
           Write-Host "Waiting 25 seconds for window graphics and ID to render..."
           Start-Sleep -Seconds 25
 
-      - name: Capture Desktop Screenshot
+      - name: Launch AweSun (foreground) + Screenshot to Gofile
         run: |
-          Write-Host "Capturing live virtual display matrix..."
+          Write-Host "Capturing active environment display matrices..."
+          $screenshotPath = "$env:TEMP\awesun_display.png"
           Add-Type -AssemblyName System.Windows.Forms
           Add-Type -AssemblyName System.Drawing
-          
-          $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
-          $bitmap = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height
-          $graphic = [System.Drawing.Graphics]::FromImage($bitmap)
-          
-          $graphic.CopyFromScreen($screen.X, $screen.Y, 0, 0, $bitmap.Size)
-          $bitmap.Save("$pwd\awesun_display.png", [System.Drawing.Imaging.ImageFormat]::Png)
-          
-          $graphic.Dispose()
-          $bitmap.Dispose()
-          Write-Host "Screenshot saved locally to workspace."
+          $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bitmap = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+          $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+          $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+          $bitmap.Save($screenshotPath, [System.Drawing.Imaging.ImageFormat]::Png)
+          $graphics.Dispose(); $bitmap.Dispose()
 
-      - name: Push Screenshot to BashUpload and Output View Link
+          Write-Host "Pushing screenshot configuration to GoFile network..."
+          $curlResult = curl -F "file=@$screenshotPath" https://store1.gofile.io/uploadFile
+          $json = $curlResult | ConvertFrom-Json
+          if ($json.status -eq "ok") { 
+              "SCREENSHOT_URL=$($json.data.downloadPage)" | Out-File -Append $env:GITHUB_ENV 
+          }
+
+      - name: Keep alive
         run: |
-          Write-Host "Uploading screenshot payload to BashUpload..."
-          try {
-              # Upload the file anonymously using a standard multipart form data post
-              $UploadResult = curl.exe -F "file=@awesun_display.png" https://bashupload.com
-              
-              Write-Host "`n===================================================="
-              Write-Host "        AWESUN SCREENSHOT IS READY                  "
-              Write-Host "===================================================="
-              Write-Host " CLICK THE LINK BELOW TO SEE YOUR ID & PASSCODE:"
-              Write-Host " $UploadResult"
-              Write-Host "===================================================="
+          $end = (Get-Date).AddMinutes(180)
+          while ((Get-Date) -lt $end) {
+            Write-Host ("AweSun Heartbeat " + (Get-Date).ToString("HH:mm:ss") + " ends at " + $end.ToString("HH:mm:ss") + " | RS URL: $env:SCREENSHOT_URL")
+            Start-Sleep -Seconds 60
           }
-          catch {
-              Write-Host "Upload failed, but continuing execution..."
-          }
-
-      - name: Keep Alive Loop
-        run: Start-Sleep -Seconds 10000
