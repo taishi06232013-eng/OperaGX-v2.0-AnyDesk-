@@ -38,26 +38,36 @@ jobs:
       - name: Dismiss Annoying Windows System Properties Popups
         run: |
           Write-Host "Killing background error popups..."
-          # This specifically targets the window processing the system property warnings
           Stop-Process -Name "systempropertiesadvanced" -Force -ErrorAction SilentlyContinue
           Stop-Process -Name "systempropertiescomputername" -Force -ErrorAction SilentlyContinue
 
       - name: Fetch and Save Official Forsaken Installer to Desktop
         run: |
-          Write-Host "Scraping the live Forsaken collaboration page for session token..."
+          Write-Host "Simulating official live session on the Opera GX Forsaken page..."
           $landingUrl = "https://www.opera.com/gx/forsaken"
-          $session = Invoke-WebRequest -Uri $landingUrl -SessionVariable webSession -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          $userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
           
-          # Target campaign URL
-          $downloadUrl = "https://net.geo.opera.com/opera_gx/stable/windows?utm_source=inf&utm_medium=gx&utm_campaign=forsaken"
+          # Initialize session connection
+          $webRequest = [System.Net.HttpWebRequest]::Create($landingUrl)
+          $webRequest.UserAgent = $userAgent
+          $webRequest.AllowAutoRedirect = $true
+          $response = $webRequest.GetResponse()
+          $finalUrl = $response.ResponseUri.AbsoluteUri
+          $response.Close()
+          
+          # Force download routing straight through the exclusive landing domain
+          $downloadUrl = "https://net.geo.opera.com/opera_gx/stable/windows?utm_source=inf&utm_medium=gx&utm_campaign=forsaken&http_referrer=$( [System.Uri]::EscapeDataString($finalUrl) )"
           
           $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
           $installerPath = "$publicDesktop\OperaGXSetup.exe"
           
-          Write-Host "Downloading installer directly to the Desktop..."
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $installerPath -UserAgent "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+          Write-Host "Downloading target event installer directly to Desktop..."
+          $client = New-Object System.Net.WebClient
+          $client.Headers.Add("User-Agent", $userAgent)
+          $client.Headers.Add("Referer", $landingUrl)
+          $client.DownloadFile($downloadUrl, $installerPath)
           
-          Write-Host "Installer downloaded successfully. Ready for manual setup inside RDP."
+          Write-Host "Authentic Forsaken Event Installer downloaded successfully!"
 
       - name: Parse Runtime Requirements
         run: |
