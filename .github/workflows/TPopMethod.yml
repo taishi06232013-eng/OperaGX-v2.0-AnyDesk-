@@ -42,7 +42,6 @@ jobs:
 
       - name: Run Silent Background Automated Installation
         run: |
-          # Locate the installer executable inside the unpacked folder dynamically
           $setupExe = Get-ChildItem -Path "$env:TEMP\awesun_installer" -Filter "*.exe" -Recurse | Select-Object -First 1
           
           if (-not $setupExe) {
@@ -51,29 +50,43 @@ jobs:
           }
           
           Write-Host "Executing silent deployment via installer: $($setupExe.FullName)"
-          # /S or /silent are standard deployment arguments to bypass the 'Install Now' popup window automatically
-          Start-Process -FilePath $setupExe.FullName -ArgumentList "/S", "/silent", "/verysilent", "/qn" -Wait -ErrorAction SilentlyContinue
           
-          Write-Host "Allowing system installation matrix 20 seconds to populate..."
-          Start-Sleep -Seconds 20
+          # 1. Run the main installer silently using the official capital /S switch
+          Start-Process -FilePath $setupExe.FullName -ArgumentList "/S" -Wait
+          Start-Sleep -Seconds 15
+          
+          # 2. Programmatically trigger the service installation switch to register background drivers
+          $serviceExe = "C:\Program Files (x86)\AweSun\AweSunService.exe"
+          if (Test-Path $serviceExe) {
+              Write-Host "Registering background service drivers..."
+              Start-Process -FilePath $serviceExe -ArgumentList "-install" -Wait -ErrorAction SilentlyContinue
+          }
+          
+          Write-Host "Allowing system installation matrix 15 seconds to finalize..."
+          Start-Sleep -Seconds 15
 
       - name: Initialize Main Pre-Installed AweSun Dashboard
         run: |
-          # Define standard default program installation pathways
           $path1 = "C:\Program Files (x86)\AweSun\AweSun.exe"
           $path2 = "C:\Program Files\AweSun\AweSun.exe"
           
           if (Test-Path $path1) { $AweSunExe = $path1 }
           elseif (Test-Path $path2) { $AweSunExe = $path2 }
           else {
-              Write-Error "CRITICAL: AweSun did not install to standard paths. Printing Program Files directories for troubleshooting:"
-              Get-ChildItem -Path "C:\Program Files (x86)", "C:\Program Files" -Filter "*AweSun*" -ErrorAction SilentlyContinue
+              Write-Host "Searching drive C for alternative AweSun paths..."
+              $AweSunExe = (Get-ChildItem -Path "C:\Program Files*" -Filter "AweSun.exe" -Recurse | Select-Object -First 1).FullName
+          }
+          
+          if (-not $AweSunExe) {
+              Write-Error "CRITICAL: AweSun did not install to standard paths."
               exit 1
           }
           
           Write-Host "Found installed application at: $AweSunExe"
           Write-Host "Launching connection framework interface..."
-          Start-Process $AweSunExe -NoNewWindow
+          
+          # Launch the program executable to generate the desktop window interface
+          Start-Process $AweSunExe
           Write-Host "Waiting 25 seconds for window rendering and credential mapping..."
           Start-Sleep -Seconds 25
 
