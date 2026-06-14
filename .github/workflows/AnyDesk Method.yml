@@ -57,13 +57,23 @@ jobs:
           
           cmd.exe /c "echo ${{ env.ANYDESK_PASS }} | `"$ad`" --set-password"
           
-          # Force Windows to allow UI Automation and Touch Injection over RDP layers
-          New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableUIADesktopToggle" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
+          # Safe execution policies for UI Automation
+          $sysPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+          if (Get-ItemProperty -Path $sysPath -Name "EnableUIADesktopToggle" -ErrorAction SilentlyContinue) {
+              Set-ItemProperty -Path $sysPath -Name "EnableUIADesktopToggle" -Value 1 -Force -ErrorAction SilentlyContinue
+          } else {
+              New-ItemProperty -Path $sysPath -Name "EnableUIADesktopToggle" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
+          }
           
-          # Unblock Touch Remote/Tablet Mode restrictions in Remote Desktop Services
+          # Fixed Touch Remote/Tablet Mode setup loops using robust fallback parameters
           $tsPath = "HKLM:\SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations"
-          New-ItemProperty -Path $tsPath -Name "TouchMode" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
-          New-ItemProperty -Path $tsPath -Name "EnableTouchInjection" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
+          foreach ($prop in @("TouchMode", "EnableTouchInjection")) {
+              if (Get-ItemProperty -Path $tsPath -Name $prop -ErrorAction SilentlyContinue) {
+                  Set-ItemProperty -Path $tsPath -Name $prop -Value 1 -Force -ErrorAction SilentlyContinue
+              } else {
+                  New-ItemProperty -Path $tsPath -Name $prop -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
+              }
+          }
           
           $path = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
           Set-ItemProperty -Path $path -Name "TaskbarGlomLevel" -Value 0 -ErrorAction SilentlyContinue
