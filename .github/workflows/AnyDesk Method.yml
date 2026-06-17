@@ -78,19 +78,18 @@ jobs:
 
       - name: Auto-Download and Extract Windscribe Extension Files
         run: |
-          Write-Host "Fetching dedicated Windscribe extension package from stable release mirror..."
+          Write-Host "Cloning Windscribe Extension package directly via Git engine..."
           $extDir = "C:\WindscribeExt"
-          if (-not (Test-Path $extDir)) { New-Item -ItemType Directory -Path $extDir -Force | Out-Null }
           
-          # Stable, verified standalone zip package hosted directly on a dedicated cdn link
-          $zipUrl = "https://pub-2fba23730799480ebcb7e8909875fe30.r2.dev/windscribe_ext.zip"
-          $zipPath = "$env:TEMP\windscribe.zip"
+          # Use Git to clone the extension source directly, completely immune to web blockages
+          git clone --depth 1 https://github.com/omeryoruk/windscribe-extension-patched.git $extDir
           
-          Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -TimeoutSec 30
-          
-          Write-Host "Unpacking extension package structures..."
-          Expand-Archive -Path $zipPath -DestinationPath $extDir -Force
-          Remove-Item $zipPath -ErrorAction SilentlyContinue
+          if (Test-Path $extDir) {
+              Write-Host "Extension successfully deployed to $extDir"
+          } else {
+              Write-Error "Failed to pull extension files."
+              exit 1
+          }
 
       - name: Download, Inject Profile Layout & Launch Opera GX
         run: |
