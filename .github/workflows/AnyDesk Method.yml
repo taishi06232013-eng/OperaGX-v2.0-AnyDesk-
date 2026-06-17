@@ -50,7 +50,6 @@ jobs:
           if (-not (Test-Path $ad)) { $ad = "C:\Program Files\AnyDesk\AnyDesk.exe" }
           
           cmd.exe /c "echo ${{ env.ANYDESK_PASS }} | `"$ad`" --set-password"
-          $LASTEXITCODE = 0
           
           # Force Windows to allow UI Automation and Touch Injection over RDP layers
           New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableUIADesktopToggle" -PropertyType DWord -Value 1 -Force -ErrorAction SilentlyContinue
@@ -68,7 +67,9 @@ jobs:
 
       - name: Minimize Running Infrastructure Windows
         run: |
-          Write-Object -ComObject Shell.Application | ForEach-Object { $_.MinimizeAll() }
+          Write-Host "Sending active command prompt windows to the taskbar tray..."
+          $shell = New-Object -ComObject Shell.Application
+          $shell.MinimizeAll()
 
       - name: Optimize Resolution for Mobile Display
         run: |
@@ -82,16 +83,15 @@ jobs:
           $installer = "$env:TEMP\OperaGXSetup.exe"
           Invoke-WebRequest -Uri $url -OutFile $installer
           
-          # Runs your original standalone parameters
+          # Runs your original working installation parameters (keeps browser closed)
           Start-Process -FilePath $installer -ArgumentList "--silent=1", "--allusers=1", "--launchbrowser=0", "--desktopshortcut=1" -Wait
           Start-Sleep -Seconds 5
 
-          # Explicitly targets the Default directory inside Opera GX Stable
+          # Targets the exact Default profile folder inside Opera GX Stable you found
           $targetDir = "$env:APPDATA\Opera Software\Opera GX Stable\Default"
           if (-not (Test-Path $targetDir)) { New-Item -ItemType Directory -Path $targetDir -Force | Out-Null }
           $prefPath = "$targetDir\Preferences"
 
-          # Programmatically generate or modify the JSON object layout safely
           Write-Host "Modifying browser profile configuration layout object..."
           if (Test-Path $prefPath) {
               $prefJson = Get-Content $prefPath -Raw | ConvertFrom-Json
@@ -99,17 +99,17 @@ jobs:
               $prefJson = New-Object PSObject
           }
 
-          # Safely construct the nested layout structure to enforce the sidebar and pin GxRewards
+          # Safely inject the layout structures to pin GxRewards
           if (-not $prefJson.ui) { $prefJson | Add-Member -MemberType NoteProperty -Name "ui" -Value (New-Object PSObject) }
           if (-not $prefJson.ui.sidebar) { $prefJson.ui | Add-Member -MemberType NoteProperty -Name "sidebar" -Value (New-Object PSObject) }
           
-          # Force the sidebar to display and pin the rewards element directly
+          # Force the sidebar visible state and pin the gx_rewards icon directly
           $prefJson.ui.sidebar | Add-Member -MemberType NoteProperty -Name "visible" -Value $true -Force
           $prefJson.ui.sidebar | Add-Member -MemberType NoteProperty -Name "pinned_items" -Value @("gx_rewards") -Force
 
-          # Convert back to compressed JSON text and save directly to the profile path
+          # Re-compress and save the settings back to the Preferences file
           $prefJson | ConvertTo-Json -Depth 100 -Compress | Set-Content $prefPath -Force
-          Write-Host "Profile properties written successfully to Default profile folder."
+          Write-Host "Profile properties successfully adjusted inside Default profile folder."
           
           $publicDesktop = [Environment]::GetFolderPath("CommonDesktopDirectory")
           $userDesktop = "$env:USERPROFILE\Desktop"
@@ -121,7 +121,7 @@ jobs:
           $operaExe = "$env:ProgramFiles\Opera GX\opera.exe"
           if (-not (Test-Path $operaExe)) { $operaExe = "$env:ProgramFiles (x86)\Opera GX\opera.exe" }
 
-          Write-Host "Configuring explicit launcher shortcut with forced promo link..."
+          Write-Host "Configuring explicit launcher shortcut with forced promo link and sidebar flags..."
           $WshShell = New-Object -ComObject WScript.Shell
           $Shortcut = $WshShell.CreateShortcut("$publicDesktop\Opera GX Browser.lnk")
           $Shortcut.TargetPath = $operaExe
